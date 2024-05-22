@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMM Volume Bot Dashboard</title>
+    <link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+    <h1>AMM Volume Bot Dashboard</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Address</th>
+                <th>Balance (ETH)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% balances.forEach(balance => { %>
+            <tr>
+                <td><%= balance.address %></td>
+                <td><%= balance.balance %></td>
+            </tr>
+            <% }) %>
+        </tbody>
+    </table>
+</body>
+</html>

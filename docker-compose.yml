@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  app1:
+    build: .
+    container_name: amm_volume_bot_1
+    env_file:
+      - .env
+      - env.instance1
+    ports:
+      - "3001:3000"
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    restart: always
+
+  app2:
+    build: .
+    container_name: amm_volume_bot_2
+    env_file:
+      - .env
+      - env.instance2
+    ports:
+      - "3002:3000"
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    restart: always
+
+  # Repeat for each instance up to app12
+
+  app12:
+    build: .
+    container_name: amm_volume_bot_12
+    env_file:
+      - .env
+      - env.instance12
+    ports:
+      - "3012:3000"
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    restart: always
