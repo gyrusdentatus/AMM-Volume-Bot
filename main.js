@@ -79,111 +79,73 @@ const main = async () => {
 
 // Ethers vars connect
 const connect = async () => {
-    // New RPC connection
     provider = new JsonRpcProvider(RPC_URL);
     wallet = new ethers.Wallet(PRIV_KEY, provider);
-
-    // Uniswap router contract
     uniswapRouter = new ethers.Contract(uniswapAdr, uniswapABI, wallet);
 
-    // Connection established
     const balance = await provider.getBalance(WALLET_ADDRESS);
-    console.log("ETH Balance:" + ethers.utils.formatEther(balance));
-    console.log("--> connected\n");
+    console.log("Connected to RPC");
+    console.log(`Wallet Address: ${WALLET_ADDRESS}`);
+    console.log(`ETH Balance: ${ethers.utils.formatEther(balance)}`);
 };
 
-// Ethers vars disconnect
 const disconnect = () => {
+    console.log("Disconnecting...");
     wallet = null;
     provider = null;
     uniswapRouter = null;
-    console.log("-disconnected-\n");
+    console.log("Disconnected successfully");
 };
 
 // AMM Trading Function
+// // Import environment variables
+const MODE = process.env.MODE;  // "buy" or "sell"
+const TOKEN1 = process.env.TOKEN1;
+const TOKEN2 = process.env.TOKEN2;
+const MAX_AMOUNT = parseInt(process.env.MAX_AMOUNT, 10); // Max amount in USD
+const TIME_BETWEEN_ORDERS = parseInt(process.env.TIME_BETWEEN_ORDERS, 10); // Time between orders in minutes
+const TOTAL_ORDERS = parseInt(process.env.TOTAL_ORDERS, 10); // Total number of orders
+
+// Random Amount Function
+const randomAmount = () => {
+    return Math.random() * (MAX_AMOUNT - 1) + 1;  // Generates a random number between 1 and MAX_AMOUNT
+};
+
+// Updated AMMTrade function to use dynamic settings
 const AMMTrade = async () => {
-    console.log("\n--- AMMTrade Start ---");
-    report.push("--- AMMTrade Report ---");
-    report.push(`By: ${WALLET_ADDRESS}`);
+    console.log("Starting AMM Trade Operation");
+    await connect();
+    let result;
+
     try {
-        const today = new Date();
-        await connect();
-        let result;
-
-        // Store last traded, increase counter
-        trades.previousTrade = today.toString();
-        const t = trades["count"];
-        trades["count"] = t + 1;
-
-        // Buy every 2nd iteration
-        const buyTime = t % 2 === 0;
-
-        // Execute appropriate action based on condition
-        if (buyTime) result = await buyTokensCreateVolume();
-        else result = await sellTokensCreateVolume();
-
-        // Update on status
-        report.push(result);
+        console.log(`Trade Mode: ${MODE}`);
+        const tradeFunction = MODE === 'buy' ? buyTokensCreateVolume : sellTokensCreateVolume;
+        result = await tradeFunction(randomAmount());
+        console.log(`Trade result: ${JSON.stringify(result)}`);
     } catch (error) {
-        report.push("AMMTrade failed!");
-        report.push(error);
-
-        // Try again later
-        console.error(error);
+        console.error("AMM Trade Operation failed", error);
         scheduleNext(new Date());
+    } finally {
+        await disconnect();
     }
+};
 
-    // Send status update report
-    report.push({ ...trades });
-    sendReport(report);
-    report = [];
+// Update scheduler to handle dynamic interval
+const scheduleNext = async (nextDate) => {
+    // Apply delay
+    await delay();
 
-    return disconnect();
+    // Set next job to be after TIME_BETWEEN_ORDERS minutes
+    nextDate.setMinutes(nextDate.getMinutes() + TIME_BETWEEN_ORDERS);
+    trades.nextTrade = nextDate.toString();
+    console.log("Next Trade: ", nextDate);
+
+    // Schedule next trade
+    scheduler.scheduleJob(nextDate, AMMTrade);
+    storeData();
 };
 
 // AMM Volume Trading Function
-const sellTokensCreateVolume = async (tries = 1.0) => {
-    try {
-        // Limit to maximum 3 tries
-        if (tries > 3) return false;
-        console.log(`Try #${tries}...`);
-
-        // Prepare the variables needed for trade
-        const path = [KTP, USDT, WETH];
-        const amt = await getAmt(path);
-
-        // Execute the swap await result
-        const a = ethers.utils.parseEther(amt);
-        const result = await swapExactTokensForETH(a, path);
-
-        // Succeeded
-        if (result) {
-            // Get the remaining balance of the current wallet
-            const u = await provider.getBalance(WALLET_ADDRESS);
-            trades.previousTrade = new Date().toString();
-            const balance = ethers.utils.formatEther(u);
-            console.log(`Balance:${balance} ETH`);
-            await scheduleNext(new Date());
-
-            // Successful
-            const success = {
-                balance: balance,
-                success: true,
-                trade: result,
-            };
-
-            return success;
-        } else throw new Error();
-    } catch (error) {
-        console.log("Attempt Failed!");
-        console.log("retrying...");
-        console.error(error);
-
-        // Fail, increment try count and retry again
-        return await sellTokensCreateVolume(++tries);
-    }
-};
-
 // Get minimum amount to trade
 const getAmt = async (path) => {
     // Update max "i" as necessary
@@ -257,45 +219,55 @@ const swapExactTokensForETH = async (amountIn, path) => {
 };
 
 // AMM Volume Trading Function
-const buyTokensCreateVolume = async (tries = 1.0) => {
+const sellTokensCreateVolume = async (tries = 1.0) => {
+    console.log(`Selling tokens, attempt #${tries}`);
+    if (tries > 3) {
+        console.log("Max retry attempts reached.");
+        return false;
+    }
+
+    const path = [TOKEN2, TOKEN1];  // Adjusted for environment variables
+    const amount = randomAmount();
+    console.log(`Path: ${path.join(" -> ")}`);
+    console.log(`Attempt to sell amount: ${amount}`);
+
     try {
-        // Limit to maximum 3 tries
-        if (tries > 3) return false;
-        console.log(`Try #${tries}...`);
-        const BUY_AMT = MIN_AMT * 5;
-
-        // Prepare the variables needed for the trade
-        const a = ethers.utils.parseEther(BUY_AMT.toString());
-        const path = [WETH, USDT, KTP];
-
-        // Execute the swap transaction and await result
-        const result = await swapExactETHForTokens(a, path);
-
-        // Succeeded
+        const result = await swapExactTokensForETH(ethers.utils.parseEther(amount.toString()), path);
         if (result) {
-            // Get the remaining balance of the current wallet
-            const u = await provider.getBalance(WALLET_ADDRESS);
-            trades.previousTrade = new Date().toString();
-            const balance = ethers.utils.formatEther(u);
-            console.log(`Balance:${balance} ETH`);
-            await scheduleNext(new Date());
-
-            // Successful
-            const success = {
-                balance: balance,
-                success: true,
-                trade: result,
-            };
-
-            return success;
-        } else throw new Error();
+            console.log("Swap successful:", result);
+            return result;
+        } else {
+            throw new Error("Swap failed with no result.");
+        }
     } catch (error) {
-        console.log("Attempt Failed!");
-        console.log("retrying...");
-        console.error(error);
+        console.error("Swap failed:", error);
+        return await sellTokensCreateVolume(tries + 1);
+    }
+};
 
-        // Fail, increment try count and retry again
-        return await buyTokensCreateVolume(++tries);
+const buyTokensCreateVolume = async (tries = 1.0) => {
+    console.log(`Buying tokens, attempt #${tries}`);
+    if (tries > 3) {
+        console.log("Max retry attempts reached.");
+        return false;
+    }
+
+    const path = [TOKEN1, TOKEN2];  // Adjusted for environment variables
+    const amount = randomAmount();
+    console.log(`Path: ${path.join(" -> ")}`);
+    console.log(`Attempt to buy amount: ${amount}`);
+
+    try {
+        const result = await swapExactETHForTokens(ethers.utils.parseEther(amount.toString()), path);
+        if (result) {
+            console.log("Swap successful:", result);
+            return result;
+        } else {
+            throw new Error("Swap failed with no result.");
+        }
+    } catch (error) {
+        console.error("Swap failed:", error);
+        return await buyTokensCreateVolume(tries + 1);
     }
 };
 
@@ -398,21 +370,6 @@ const todayDate = () => {
 };
 
 // Job Scheduler Function
-const scheduleNext = async (nextDate) => {
-    // Apply delay
-    await delay();
-
-    // Set next job to be 12hrs from now
-    nextDate.setHours(nextDate.getHours() + x);
-    trades.nextTrade = nextDate.toString();
-    console.log("Next Trade: ", nextDate);
-
-    // Schedule next restake
-    scheduler.scheduleJob(nextDate, AMMTrade);
-    storeData();
-    return;
-};
-
 // Data Storage Function
 const storeData = async () => {
     const data = JSON.stringify(trades);

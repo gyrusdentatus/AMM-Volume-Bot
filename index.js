@@ -7,69 +7,74 @@ const WALLET_ADDRESS = process.env.USER_ADDRESS;
 const PRIV_KEY = process.env.USER_PRIVATE_KEY;
 const uniswapABI = require("./ABI/uniswapABI");
 const uniswapAdr = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const readline = require('readline');
+const main = require('./main'); // Ensure main.js exports connect, AMMTrade, and checkBalance
 
-// Check environment variables
-if (!RPC_URL || !WALLET_ADDRESS || !PRIV_KEY) {
-    console.error("Missing environment variables. Please check your .env file.");
-    process.exit(1);
-}
+// Ensure environment variables are set up before proceeding
+require('dotenv').config();
 
-const provider = new ethers.JsonRpcProvider(RPC_URL);
-const wallet = new ethers.Wallet(PRIV_KEY, provider);
-const uniswapRouter = new ethers.Contract(uniswapAdr, uniswapABI, wallet);
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
 
-const checkConnection = async () => {
-    try {
-        const blockNumber = await provider.getBlockNumber();
-        console.log("Connected to the provider. Current block number:", blockNumber);
-    } catch (error) {
-        console.error("Failed to connect to the provider:", error);
-        process.exit(1);
-    }
+const showMenu = () => {
+    console.log("\nAMM Trading System");
+    console.log("1. Connect to Wallet");
+    console.log("2. Execute Trade");
+    console.log("3. Check Balance");
+    console.log("4. Exit");
+
+    rl.question("Choose an option: ", function(option) {
+        switch (option) {
+            case '1':
+                main.connect()
+                    .then(() => {
+                        console.log("Connected Successfully!");
+                        showMenu();
+                    })
+                    .catch(err => {
+                        console.error("Connection Failed:", err);
+                        showMenu();
+                    });
+                break;
+            case '2':
+                main.AMMTrade()
+                    .then(() => {
+                        console.log("Trade Executed Successfully!");
+                        showMenu();
+                    })
+                    .catch(err => {
+                        console.error("Trade Execution Failed:", err);
+                        showMenu();
+                    });
+                break;
+            case '3':
+                main.checkBalance()
+                    .then(balance => {
+                        console.log(`Current Wallet Balance: ${balance}`);
+                        showMenu();
+                    })
+                    .catch(err => {
+                        console.error("Failed to Fetch Balance:", err);
+                        showMenu();
+                    });
+                break;
+            case '4':
+                console.log("Exiting...");
+                rl.close();
+                break;
+            default:
+                console.log("Invalid option, please choose again.");
+                showMenu();
+        }
+    });
 };
 
-const checkBalance = async () => {
-    try {
-        const balance = await provider.getBalance(WALLET_ADDRESS);
-        console.log("Wallet Balance:", ethers.utils.formatEther(balance), "ETH");
-    } catch (error) {
-        console.error("Error retrieving balance:", error);
-        process.exit(1);
-    }
-};
+rl.on('close', function() {
+    console.log('\nGoodbye!');
+    process.exit(0);
+});
 
-const loadAddresses = () => {
-    try {
-        const addresses = JSON.parse(fs.readFileSync('addresses.json'));
-        console.log("Addresses loaded:", addresses);
-        return addresses;
-    } catch (error) {
-        console.error("Error loading addresses:", error);
-        process.exit(1);
-    }
-};
-
-const logTradeDetails = () => {
-    console.log("\n--- Trade Details ---");
-    console.log("RPC URL:", RPC_URL);
-    console.log("Wallet Address:", WALLET_ADDRESS);
-    console.log("Uniswap Router Address:", uniswapAdr);
-    console.log("---------------------\n");
-};
-
-const main = async () => {
-    console.log("Starting AMM Volume Bot Launcher...\n");
-
-    await checkConnection();
-    await checkBalance();
-    const addresses = loadAddresses();
-    logTradeDetails();
-
-    console.log("Launching main bot...\n");
-
-    // Import main bot script
-    require('./main');
-};
-
-main();
+showMenu();
 
